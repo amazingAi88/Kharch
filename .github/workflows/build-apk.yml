@@ -15,12 +15,25 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: 8.7
-      - name: Build
+      - name: Pick the newest project zip and build
         run: |
-          unzip -q -o KharchaKhata-android-project.zip
-          cd KharchaKhata
+          mkdir -p _src _build
+          for o in $(find . -type f -iname '*.zip' -not -path './_src/*' -not -path './_build/*' -not -name 'KharchaKhata-android-project.zip'); do
+            unzip -q -o "$o" -d "_src/$(basename "$o" .zip)" || true
+          done
+          best=""; bestv=-1
+          for z in $(find . -type f -name 'KharchaKhata-android-project.zip' -not -path './_build/*'); do
+            v=$(unzip -p "$z" KharchaKhata/app/build.gradle.kts 2>/dev/null | grep -o 'versionCode = [0-9]*' | grep -o '[0-9]*' || true)
+            v=${v:-0}
+            echo "found $z -> versionCode $v"
+            if [ "$v" -gt "$bestv" ]; then best="$z"; bestv="$v"; fi
+          done
+          if [ -z "$best" ]; then echo "Project zip not found"; exit 1; fi
+          echo "Using $best (versionCode $bestv)"
+          unzip -q -o "$best" -d _build
+          cd _build/KharchaKhata
           gradle assembleDebug --no-daemon
       - uses: actions/upload-artifact@v4
         with:
           name: kharcha-apk
-          path: KharchaKhata/app/build/outputs/apk/debug/app-debug.apk
+          path: _build/KharchaKhata/app/build/outputs/apk/debug/app-debug.apk
